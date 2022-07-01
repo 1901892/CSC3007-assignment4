@@ -1,0 +1,326 @@
+<!DOCTYPE html>
+    <html>
+        <head>
+            <title>SG Covid-19 Cluster Info</title>
+
+            <!-- Viewport for responsive web design -->
+            <meta name="viewport" content="width=device-width, initial-scale=1">
+
+            <!-- D3.js import --> 
+            <script src="https://d3js.org/d3.v7.min.js"></script>
+
+            <!-- D3-legend import --> 
+            <script src="https://cdnjs.cloudflare.com/ajax/libs/d3-legend/2.25.6/d3-legend.min.js"></script>
+
+            <!-- Jquery import -->
+            <script src="https://cdn.jsdelivr.net/npm/jquery@3.5.1/dist/jquery.slim.min.js" integrity="sha384-DfXdz2htPH0lsSSs5nCTpuj/zy4C+OGpamoFVy38MVBnE+IbbVYUew+OrCXaRkfj" crossorigin="anonymous"></script>
+
+            <!-- Bootstrap JS import -->
+            <script src="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/js/bootstrap.bundle.min.js" integrity="sha384-fQybjgWLrvvRgtW6bFlB7jaZrFsaBXjsOMm/tB9LTS58ONXgqbR9W8oWht/amnpF" crossorigin="anonymous"></script>            
+
+            <!-- Bootstrap CSS import -->
+            <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@4.6.1/dist/css/bootstrap.min.css" integrity="sha384-zCbKRCUGaJDkqS1kPbPd7TveP5iyJE0EjAuZQTgFLD2ylzuqKfdKlfG/eSrtxUkn" crossorigin="anonymous">
+
+            <!-- Google fonts CSS import -->
+            <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet">
+        
+            <!-- CSS style sheet -->
+            <style>
+                body {
+                    background-image: url("https://upload.wikimedia.org/wikipedia/commons/thumb/b/b0/Singapore_Marina_Bay_Dusk_2018-02-27.jpg/2560px-Singapore_Marina_Bay_Dusk_2018-02-27.jpg");
+                    background-position: center;
+                    background-repeat: no-repeat;
+                    background-attachment: fixed;
+                    background-size: cover;
+                }
+                h1 {
+                    color: lightskyblue;
+                    font-size: 50px;
+                    text-align: center;
+                    font-family: 'Roboto', sans-serif;
+                }
+                .header {
+                    background: black;
+                    opacity: 85%;
+                }
+                .container {
+                    background: white;
+                    opacity: 95%;
+                    padding: 5px;
+                }
+            </style>
+        </head>
+
+    <body>
+        <div class="header">
+            <h1>Singapore Covid-19 Cluster Information</h1>
+        </div>
+
+        <div class="container text-center">
+            <h5>A visualisation of Covid-19 clusters originating from cases 64349 and 64413</h5>
+            <div class="btn-group btn-group-toggle" data-toggle="buttons">
+                <label class="btn btn-secondary">
+                    <input type="radio" name="options" id="optionGender" autocomplete="off" checked> Gender
+                </label>
+                <label class="btn btn-secondary">
+                    <input type="radio" name="options" id="optionAge" autocomplete="off"> Age
+                </label>
+                <label class="btn btn-secondary">
+                    <input type="radio" name="options" id="optionVaccinated" autocomplete="off"> Vaccinated
+                </label>
+            </div>
+        </div>
+
+        <div class="container text-center">
+            <svg></svg>
+            <script>
+                let width = 800, height = 400;
+
+                let svg = d3.select("svg")
+                    .attr("viewBox", "0 0 " + width + " " + height)
+
+                //Load external data
+                Promise.all([d3.json("links-sample.json"), d3.json("cases-sample.json")]).then(data => {
+
+                //Data preprocessing
+                data[0].forEach(e => {
+                        e.source = e.infector;
+                        e.target = e.infectee;
+                    });
+                    
+                //console.log(data[0]); //links
+                //console.log(data[1]); //cases
+
+                //Define the domain and colors for use with color scale and legend
+                let genderDomain = new Map([["male", "lightskyblue"], ["female", "pink"]])
+                let ageDomain = ["9 and below", "10 - 19", "20 - 29", "30 - 39", "40 - 49", "50 - 59", "60 - 69", "70 - 79", "80 and above"]
+                let ageColorScheme = d3.schemePastel1
+                let vaccinatedDomain = new Map([["no", "lightcoral"], ["partial (1 dose)", "palegoldenrod"], ["yes (2 doses)", "lightgreen"]])
+
+                //Define color scale
+                var genderScale = d3.scaleThreshold()
+                    .domain(genderDomain.keys())
+                    .range(genderDomain.values())
+
+                var ageScale = d3.scaleThreshold()
+                    .domain(ageDomain)
+                    .range(ageColorScheme)
+
+                var vaccinatedScale = d3.scaleThreshold()
+                    .domain(vaccinatedDomain.keys())
+                    .range(vaccinatedDomain.values())
+
+                //Define tooltip
+                var tooltip = d3.select("body")
+                    .append("div")
+                    .attr('class', 'd3-tooltip')
+                    .style('position', 'absolute')
+                    .style('visibility', 'hidden')
+                    .style('padding', '10px')
+                    .style('border-radius', '10px')
+                    .style('color', 'white')
+                    .style('background', 'rgba(0,0,0,0.8)')
+                    .style('pointer-events', 'none')
+
+                //Define arrow marker
+                svg.append("defs").append("marker")
+                    .attr("id", "marker")
+                    .attr("viewBox", "0 -5 10 10")
+                    .attr("refX", 25)
+                    .attr("refY", -1.5)
+                    .attr("markerWidth", 6)
+                    .attr("markerHeight", 6)
+                    .attr("markerUnits", "userSpaceOnUse")
+                    .attr("orient", "auto")
+                    .append("path")
+                    .attr("d", "M0,-5L11,0L0,5")
+
+                //Add linkpaths to SVG
+                let linkpath = svg.append("g")
+                    .attr("id", "links")
+                    .selectAll("path")
+                    .data(data[0])
+                    .enter()
+                    .append("path")
+                    .attr("fill", "none")
+                    .attr("stroke", "black")
+                    .attr("stroke-width", 2)
+                    .attr("marker-end", "url(#marker)")
+                
+                let node = svg.append("g")
+                    .attr("id", "nodes")
+                    .selectAll("circle")
+                    .data(data[1])
+                    .enter()
+                    .append("circle")
+                    .attr("r", 10)
+                    .style('fill', function(d) {
+                        return genderDomain.get(d.gender)
+                    })
+                    .call(d3.drag()
+                        .on("start", dragstarted)
+                        .on("drag", dragged)
+                        .on("end", dragended))
+                    .on('mouseover', function(event, d) {
+                        d3.select(event.currentTarget)
+                            .style("stroke", "black")
+                            .style("stroke-width", 1)
+                        tooltip
+                            .html('Case: ' + d.id + '<br> Age: ' + d.age + '<br> Gender: ' + d.gender + '<br> Nationality: ' + d.nationality + '<br> Occupation: ' + d.occupation + '<br> Organization: ' + d.organization + '<br> Date: ' + d.date + '<br> Serology: ' + d.serology + '<br> Vaccinated: ' + d.vaccinated)
+                            .style('visibility', 'visible')
+                    })
+                    .on('mousemove', function(event, d) {
+                        tooltip
+                            .style('left', event.pageX + 'px')
+                            .style('top', event.pageY + 'px')
+                    })
+                    .on('mouseout', function(d) {
+                        d3.select(event.currentTarget)
+                            .style("stroke-width", 0)
+                        tooltip
+                            .style('visibility', 'hidden')
+                    })
+
+                    //Add D3 force simulation
+                    let simulation = d3.forceSimulation()
+                        .nodes(data[1])
+                        .force("link", d3.forceLink(data[0])
+                            .id(d => d.id)
+                            .distance(50)
+                            .strength(0.5)
+                        )
+                        .force('center', d3.forceCenter(width / 2, height / 2))
+                        .force("charge", d3.forceManyBody().strength(20))
+                        .force("collide", d3.forceCollide().strength(0.1).radius(30))
+                        .on("tick", d => {
+                            node
+                                .attr("cx", d => d.x)
+                                .attr("cy", d => d.y)
+
+                            //linkpath
+                                //.attr("d", d => "M" + d.source.x + "," + d.source.y + " " + d.target.x + "," + d.target.y);
+
+                            linkpath
+                                .attr("d", function(d) {
+                                    var dx = d.target.x - d.source.x,
+                                        dy = d.target.y - d.source.y,
+                                        dr = Math.sqrt(dx * dx + dy * dy);
+                                    return "M" + d.source.x + "," + d.source.y + "A" + dr + "," + dr + " 0 0,1 " + d.target.x + "," + d.target.y;
+                                })
+                        })
+
+                    //Functions to add drag interactivity
+                    function dragstarted(event, d) {
+                        if (!event.active) simulation.alphaTarget(0.3).restart();
+                        d.fx = d.x;
+                        d.fy = d.y;
+                    }
+                    function dragged(event, d) {
+                        d.fx = event.x;
+                        d.fy = event.y;
+                    }
+                    function dragended(event, d) {
+                        if (!event.active) simulation.alphaTarget(0);
+                        d.fx = null;
+                        d.fy = null;
+                    }
+
+                    //Function to change the fill of the circles and legend based on selected category
+                    function showCategory(selected){
+                        if (selected == "gender") {
+                            svg.selectAll("circle")
+                                .transition()
+                                .duration(1000)
+                                .style('fill', function(d) {
+                                    return genderDomain.get(d.gender)
+                                })
+
+                            //Define legend
+                            var legend = d3.legendColor()
+                                .labels(genderDomain.keys())
+                                .scale(genderScale)
+                                .title("Gender")
+                                .shape("path", d3.symbol().type(d3.symbolCircle).size(150)())
+
+                            //Remove existing legend
+                            svg.selectAll("g.legend")
+                                .remove()
+
+                            //Add legend to the svg
+                            svg.append("g")
+                                .attr("class", "legend")
+                                .attr("transform", "translate(50,50)")
+                                .style("font-size", "10px")
+                                .call(legend)
+                        }
+                        else if (selected == "age") {
+                            svg.selectAll("circle")
+                                .transition()
+                                .duration(1000)
+                                .style('fill', function(d) {
+                                    return d3.scaleQuantize([0, 90], ageColorScheme)(d.age)
+                                })
+
+                            //Define legend
+                            var legend = d3.legendColor()
+                                .labels(ageDomain)
+                                .scale(ageScale)
+                                .title("Age")
+                                .shape("path", d3.symbol().type(d3.symbolCircle).size(150)())
+
+                            //Remove existing legend
+                            svg.selectAll("g.legend")
+                                .remove()
+
+                            //Add legend to the svg
+                            svg.append("g")
+                                .attr("class", "legend")
+                                .attr("transform", "translate(50,50)")
+                                .style("font-size", "10px")
+                                .call(legend)
+                        }
+                        else if (selected == "vaccinated") {
+                            svg.selectAll("circle")
+                                .transition()
+                                .duration(1000)
+                                .style('fill', function(d) {
+                                    return vaccinatedDomain.get(d.vaccinated)
+                                })
+
+                            //Define legend
+                            var legend = d3.legendColor()
+                                .labels(vaccinatedDomain.keys())
+                                .scale(vaccinatedScale)
+                                .title("Vaccinated")
+                                .shape("path", d3.symbol().type(d3.symbolCircle).size(150)())
+
+                            //Remove existing legend
+                            svg.selectAll("g.legend")
+                                .remove()
+
+                            //Add legend to the svg
+                            svg.append("g")
+                                .attr("class", "legend")
+                                .attr("transform", "translate(50,50)")
+                                .style("font-size", "10px")
+                                .call(legend)
+                        }
+                    }
+
+                    //Obtain user selection and call function to change the fill of the circles and legend
+                    d3.select("#optionGender").on("click", function(d) {
+                        showCategory("gender")
+                    })
+                    d3.select("#optionAge").on("click", function(d) {
+                        showCategory("age")
+                    })
+                    d3.select("#optionVaccinated").on("click", function(d) {
+                        showCategory("vaccinated")
+                    })
+                    //Default category to show when page is loaded
+                    showCategory("gender")
+                })
+            </script>
+        </div>
+    </body>
+</html>
